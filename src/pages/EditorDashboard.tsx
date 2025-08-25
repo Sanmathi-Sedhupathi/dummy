@@ -1,9 +1,42 @@
 import React, { useState, useEffect } from 'react';
 import { Routes, Route, Link, useNavigate, useLocation, useParams } from 'react-router-dom';
-import { Calendar, Settings, LogOut, BarChart3, MessageSquare, Award, MapPin, Menu, X, ChevronRight, Video, Play } from 'lucide-react';
+import { Calendar, Settings, LogOut, BarChart3, MessageSquare, Award, MapPin, Menu, X, ChevronRight, Video, Play, User, DollarSign, FileText, Eye } from 'lucide-react';
 import axios from 'axios';
 import { authService } from '../services/api';
 import VideoSubmissions from '../components/editor/VideoSubmissions';
+
+interface Order {
+  id: number;
+  service_type: string;
+  location_details: string;
+  preferred_date: string;
+  preferred_time: string;
+  special_requirements: string;
+  voiceover_script: string;
+  background_music_licensed: boolean;
+  branding_overlay: boolean;
+  multiple_revisions: boolean;
+  num_floors: number;
+  area_sqft: number;
+  base_cost: number;
+  floor_cost: number;
+  addon_cost: number;
+  final_cost: number;
+  pilot_earnings: number;
+  editor_earnings: number;
+  referral_earnings: number;
+  status: string;
+  payment_status: string;
+  created_at: string;
+  client_name: string;
+  business_name: string;
+  client_email: string;
+  client_phone: string;
+  pilot_name: string;
+  pilot_email: string;
+  referral_name: string;
+  raw_video_link: string;
+}
 
 const EditorDashboard: React.FC = () => {
   const [isSidebarOpen, setIsSidebarOpen] = useState(true);
@@ -43,14 +76,12 @@ const EditorDashboard: React.FC = () => {
   const fetchStats = async () => {
     try {
       const token = localStorage.getItem('token');
-      console.log('Fetching editor stats...');
 
       // Use the modified assigned-orders endpoint that now returns all orders
       const response = await axios.get('http://localhost:5000/api/editor/assigned-orders', {
         headers: { Authorization: `Bearer ${token}` }
       });
 
-      console.log('Editor orders response:', response.data);
       const allOrders = response.data || [];
       const ongoingOrders = allOrders.filter((b: any) => !['completed', 'cancelled', 'rejected'].includes(b.status));
       const completedOrders = allOrders.filter((b: any) => b.status === 'completed');
@@ -60,14 +91,10 @@ const EditorDashboard: React.FC = () => {
         ongoingOrders: ongoingOrders.length,
         completedOrders: completedOrders.length,
         cancelledOrders: cancelledOrders.length,
-        totalEarnings: completedOrders
-          .filter((b: any) => b.payment_status === 'paid')
-          .reduce((sum: number, b: any) => sum + (b.payment_amount || 0), 0)
+        totalEarnings: completedOrders.reduce((sum: number, b: any) => sum + (b.editor_earnings || 0), 0)
       };
-      console.log('Editor stats calculated:', stats);
       setStats(stats);
     } catch (err) {
-      console.error('Failed to fetch editor stats:', err);
       // Set default stats on error
       setStats({
         ongoingOrders: 0,
@@ -216,10 +243,12 @@ const DashboardContent: React.FC<{ stats: any }> = ({ stats }) => (
 );
 
 const OngoingOrdersContent: React.FC = () => {
-  const [orders, setOrders] = useState<any[]>([]);
+  const [orders, setOrders] = useState<Order[]>([]);
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState('');
   const [expandedOrder, setExpandedOrder] = useState<number | null>(null);
+  const [selectedOrder, setSelectedOrder] = useState<Order | null>(null);
+  const [showDetailsModal, setShowDetailsModal] = useState(false);
 
   useEffect(() => {
     fetchOngoingOrders();
@@ -245,13 +274,11 @@ const OngoingOrdersContent: React.FC = () => {
   const fetchOngoingOrders = async () => {
     try {
       const token = localStorage.getItem('token');
-      console.log('Fetching ongoing orders for editor...');
 
       const response = await axios.get('http://localhost:5000/api/editor/assigned-orders', {
         headers: { Authorization: `Bearer ${token}` }
       });
 
-      console.log('Editor assigned orders response:', response.data);
       const allOrders = response.data || [];
 
       // Filter for ongoing orders only
@@ -259,14 +286,19 @@ const OngoingOrdersContent: React.FC = () => {
         !['completed', 'cancelled', 'rejected'].includes(order.status)
       );
 
-      console.log('Filtered ongoing orders:', ongoingOrders);
       setOrders(ongoingOrders);
       setLoading(false);
     } catch (err) {
-      console.error('Error fetching ongoing orders:', err);
       setError('Failed to fetch ongoing orders');
       setLoading(false);
     }
+  };
+
+  const formatCurrency = (amount: number) => {
+    return new Intl.NumberFormat('en-IN', {
+      style: 'currency',
+      currency: 'INR'
+    }).format(amount || 0);
   };
 
   if (loading) return <div>Loading...</div>;
@@ -278,10 +310,10 @@ const OngoingOrdersContent: React.FC = () => {
         <table className="min-w-full divide-y divide-gray-200">
           <thead className="bg-gray-50">
             <tr>
-              <th className="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase">Expand</th>
               <th className="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase">Order ID</th>
-              <th className="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase">Client ID</th>
-              <th className="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase">Pilot ID</th>
+              <th className="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase">Client</th>
+              <th className="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase">Service & Location</th>
+              <th className="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase">My Earnings</th>
               <th className="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase">Status</th>
               <th className="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase">Actions</th>
             </tr>
@@ -296,25 +328,60 @@ const OngoingOrdersContent: React.FC = () => {
             ) : (
               orders.map((order) => (
               <tr key={order.id}>
-                <td className="px-6 py-4 whitespace-nowrap">
-                  <button
-                    onClick={() => setExpandedOrder(expandedOrder === order.id ? null : order.id)}
-                    className="text-gray-400 hover:text-gray-600"
-                  >
-                    <ChevronRight
-                      size={16}
-                      className={`transform transition-transform ${expandedOrder === order.id ? 'rotate-90' : ''}`}
-                    />
-                  </button>
-                </td>
                 <td className="px-6 py-4 whitespace-nowrap text-sm font-medium text-gray-900">
-                  HMX{order.id.toString().padStart(4, '0')}
+                  <div className="flex items-center">
+                    <Calendar className="w-4 h-4 text-gray-400 mr-2" />
+                    <div>
+                      <div>HMX{order.id.toString().padStart(4, '0')}</div>
+                      <div className="text-xs text-gray-500">
+                        {order.preferred_date ? new Date(order.preferred_date).toLocaleDateString() : 'Date TBD'}
+                      </div>
+                    </div>
+                  </div>
                 </td>
-                <td className="px-6 py-4 whitespace-nowrap text-sm text-gray-500">
-                  {order.client_id || 'N/A'}
+                <td className="px-6 py-4 whitespace-nowrap">
+                  <div className="flex items-center">
+                    <User className="w-4 h-4 text-gray-400 mr-2" />
+                    <div>
+                      <div className="text-sm font-medium text-gray-900">{order.client_name}</div>
+                      <div className="text-sm text-gray-500">{order.business_name}</div>
+                      <div className="text-xs text-gray-400">{order.client_email}</div>
+                    </div>
+                  </div>
                 </td>
-                <td className="px-6 py-4 whitespace-nowrap text-sm text-gray-500">
-                  {order.pilot_id || 'N/A'}
+                <td className="px-6 py-4">
+                  <div className="flex items-start">
+                    <MapPin className="w-4 h-4 text-gray-400 mr-2 mt-0.5" />
+                    <div>
+                      <div className="text-sm font-medium text-gray-900">{order.service_type}</div>
+                      <div className="text-sm text-gray-500 max-w-xs truncate">{order.location_details}</div>
+                      <div className="text-xs text-gray-400">{order.area_sqft} sq ft • {order.num_floors} floor(s)</div>
+                      {order.raw_video_link && (
+                        <a
+                          href={order.raw_video_link}
+                          target="_blank"
+                          rel="noopener noreferrer"
+                          className="text-blue-600 hover:text-blue-900 text-xs flex items-center mt-1"
+                        >
+                          <Video size={12} className="mr-1" />
+                          Raw Video Available
+                        </a>
+                      )}
+                    </div>
+                  </div>
+                </td>
+                <td className="px-6 py-4 whitespace-nowrap">
+                  <div className="flex items-center">
+                    <DollarSign className="w-4 h-4 text-green-500 mr-1" />
+                    <div>
+                      <div className="text-sm font-medium text-green-600">
+                        {formatCurrency(order.editor_earnings)}
+                      </div>
+                      <div className="text-xs text-gray-500">
+                        from {formatCurrency(order.final_cost)}
+                      </div>
+                    </div>
+                  </div>
                 </td>
                 <td className="px-6 py-4 whitespace-nowrap">
                   <span className={`px-2 inline-flex text-xs leading-5 font-semibold rounded-full ${getStatusColor(order.status)}`}>
@@ -324,12 +391,25 @@ const OngoingOrdersContent: React.FC = () => {
                   </span>
                 </td>
                 <td className="px-6 py-4 whitespace-nowrap text-sm font-medium">
-                  <button
-                    onClick={() => handleViewHistory(order.id)}
-                    className="text-blue-600 hover:text-blue-900 font-medium"
-                  >
-                    View
-                  </button>
+                  <div className="flex space-x-2">
+                    <button
+                      onClick={() => {
+                        setSelectedOrder(order);
+                        setShowDetailsModal(true);
+                      }}
+                      className="text-blue-600 hover:text-blue-900"
+                      title="View Details"
+                    >
+                      <Eye size={16} />
+                    </button>
+                    <button
+                      onClick={() => handleViewHistory(order.id)}
+                      className="text-green-600 hover:text-green-900"
+                      title="Submission History"
+                    >
+                      <Video size={16} />
+                    </button>
+                  </div>
                 </td>
               </tr>
               ))
@@ -337,12 +417,198 @@ const OngoingOrdersContent: React.FC = () => {
           </tbody>
         </table>
       </div>
+
+      {/* Order Details Modal */}
+      {showDetailsModal && selectedOrder && (
+        <div className="fixed inset-0 bg-gray-600 bg-opacity-50 overflow-y-auto h-full w-full z-50">
+          <div className="relative top-20 mx-auto p-5 border w-11/12 max-w-6xl shadow-lg rounded-md bg-white">
+            <div className="flex justify-between items-center mb-4">
+              <h3 className="text-lg font-bold text-gray-900">
+                Order Details - HMX{selectedOrder.id.toString().padStart(4, '0')}
+              </h3>
+              <button
+                onClick={() => setShowDetailsModal(false)}
+                className="text-gray-400 hover:text-gray-600"
+              >
+                <X size={24} />
+              </button>
+            </div>
+
+            <div className="grid grid-cols-1 md:grid-cols-3 gap-6">
+              {/* Basic Information */}
+              <div className="space-y-4">
+                <h4 className="font-semibold text-gray-900 border-b pb-2">Basic Information</h4>
+                <div>
+                  <label className="block text-sm font-medium text-gray-700">Service Type</label>
+                  <p className="mt-1 text-sm text-gray-900">{selectedOrder.service_type}</p>
+                </div>
+                <div>
+                  <label className="block text-sm font-medium text-gray-700">Location</label>
+                  <p className="mt-1 text-sm text-gray-900">{selectedOrder.location_details}</p>
+                </div>
+                <div>
+                  <label className="block text-sm font-medium text-gray-700">Preferred Date & Time</label>
+                  <p className="mt-1 text-sm text-gray-900">
+                    {selectedOrder.preferred_date ? new Date(selectedOrder.preferred_date).toLocaleDateString() : 'Not set'}
+                    {selectedOrder.preferred_time && ` at ${selectedOrder.preferred_time}`}
+                  </p>
+                </div>
+                <div>
+                  <label className="block text-sm font-medium text-gray-700">Area & Floors</label>
+                  <p className="mt-1 text-sm text-gray-900">
+                    {selectedOrder.area_sqft} sq ft, {selectedOrder.num_floors} floor(s)
+                  </p>
+                </div>
+                <div>
+                  <label className="block text-sm font-medium text-gray-700">Client</label>
+                  <p className="mt-1 text-sm text-gray-900">{selectedOrder.client_name}</p>
+                  <p className="text-xs text-gray-500">{selectedOrder.business_name}</p>
+                  <p className="text-xs text-gray-500">{selectedOrder.client_email}</p>
+                </div>
+                <div>
+                  <label className="block text-sm font-medium text-gray-700">Pilot</label>
+                  <p className="mt-1 text-sm text-gray-900">{selectedOrder.pilot_name || 'Not assigned'}</p>
+                  {selectedOrder.pilot_email && (
+                    <p className="text-xs text-gray-500">{selectedOrder.pilot_email}</p>
+                  )}
+                </div>
+              </div>
+
+              {/* Enhanced Features & Requirements */}
+              <div className="space-y-4">
+                <h4 className="font-semibold text-gray-900 border-b pb-2">Editing Requirements</h4>
+                <div>
+                  <label className="block text-sm font-medium text-gray-700">Special Requirements</label>
+                  <p className="mt-1 text-sm text-gray-900">{selectedOrder.special_requirements || 'None'}</p>
+                </div>
+                <div>
+                  <label className="block text-sm font-medium text-gray-700">Voiceover Script</label>
+                  <p className="mt-1 text-sm text-gray-900 bg-gray-50 p-2 rounded max-h-32 overflow-y-auto">
+                    {selectedOrder.voiceover_script || 'No voiceover required'}
+                  </p>
+                </div>
+                <div className="space-y-2">
+                  <div className="flex items-center">
+                    <span className="text-sm font-medium text-gray-700 w-32">Licensed Music:</span>
+                    <span className={`text-sm ${selectedOrder.background_music_licensed ? 'text-green-600' : 'text-gray-500'}`}>
+                      {selectedOrder.background_music_licensed ? 'Required' : 'Not required'}
+                    </span>
+                  </div>
+                  <div className="flex items-center">
+                    <span className="text-sm font-medium text-gray-700 w-32">Branding Overlay:</span>
+                    <span className={`text-sm ${selectedOrder.branding_overlay ? 'text-green-600' : 'text-gray-500'}`}>
+                      {selectedOrder.branding_overlay ? 'Required' : 'Not required'}
+                    </span>
+                  </div>
+                  <div className="flex items-center">
+                    <span className="text-sm font-medium text-gray-700 w-32">Multiple Revisions:</span>
+                    <span className={`text-sm ${selectedOrder.multiple_revisions ? 'text-green-600' : 'text-gray-500'}`}>
+                      {selectedOrder.multiple_revisions ? 'Allowed' : 'Standard revisions'}
+                    </span>
+                  </div>
+                </div>
+                {selectedOrder.raw_video_link && (
+                  <div>
+                    <label className="block text-sm font-medium text-gray-700">Raw Video from Pilot</label>
+                    <a
+                      href={selectedOrder.raw_video_link}
+                      target="_blank"
+                      rel="noopener noreferrer"
+                      className="mt-1 text-blue-600 hover:text-blue-900 flex items-center text-sm"
+                    >
+                      <Video size={16} className="mr-1" />
+                      View Raw Video
+                    </a>
+                  </div>
+                )}
+              </div>
+
+              {/* Earnings & Cost */}
+              <div className="space-y-4">
+                <h4 className="font-semibold text-gray-900 border-b pb-2">Earnings & Cost</h4>
+                
+                {/* My Earnings */}
+                <div className="bg-green-50 p-4 rounded-lg">
+                  <h5 className="font-medium text-green-900 mb-2">My Earnings (15%)</h5>
+                  <div className="text-2xl font-bold text-green-600">
+                    {formatCurrency(selectedOrder.editor_earnings)}
+                  </div>
+                  <div className="text-xs text-green-700 mt-1">
+                    From total project cost of {formatCurrency(selectedOrder.final_cost)}
+                  </div>
+                </div>
+
+                {/* Cost Breakdown */}
+                <div className="bg-gray-50 p-4 rounded-lg">
+                  <h5 className="font-medium text-gray-900 mb-2">Project Cost Breakdown</h5>
+                  <div className="space-y-1 text-sm">
+                    <div className="flex justify-between">
+                      <span>Base Cost:</span>
+                      <span>{formatCurrency(selectedOrder.base_cost)}</span>
+                    </div>
+                    {selectedOrder.floor_cost > 0 && (
+                      <div className="flex justify-between">
+                        <span>Additional Floors:</span>
+                        <span>{formatCurrency(selectedOrder.floor_cost)}</span>
+                      </div>
+                    )}
+                    {selectedOrder.addon_cost > 0 && (
+                      <div className="flex justify-between">
+                        <span>Add-ons:</span>
+                        <span>{formatCurrency(selectedOrder.addon_cost)}</span>
+                      </div>
+                    )}
+                    <div className="flex justify-between border-t pt-1 font-semibold">
+                      <span>Total:</span>
+                      <span className="text-primary-600">{formatCurrency(selectedOrder.final_cost)}</span>
+                    </div>
+                  </div>
+                </div>
+
+                {/* Team Earnings */}
+                <div className="bg-blue-50 p-4 rounded-lg">
+                  <h5 className="font-medium text-gray-900 mb-2">Team Earnings Distribution</h5>
+                  <div className="space-y-1 text-xs">
+                    <div className="flex justify-between">
+                      <span>Pilot:</span>
+                      <span>{formatCurrency(selectedOrder.pilot_earnings)}</span>
+                    </div>
+                    <div className="flex justify-between">
+                      <span>Editor (Me):</span>
+                      <span className="font-semibold text-green-600">{formatCurrency(selectedOrder.editor_earnings)}</span>
+                    </div>
+                    <div className="flex justify-between">
+                      <span>Referral:</span>
+                      <span>{formatCurrency(selectedOrder.referral_earnings)}</span>
+                    </div>
+                  </div>
+                </div>
+              </div>
+            </div>
+
+            <div className="mt-6 flex justify-end space-x-3">
+              <button
+                onClick={() => handleViewHistory(selectedOrder.id)}
+                className="px-4 py-2 bg-primary-600 text-white rounded-md hover:bg-primary-700"
+              >
+                View Submission History
+              </button>
+              <button
+                onClick={() => setShowDetailsModal(false)}
+                className="px-4 py-2 bg-gray-300 text-gray-700 rounded-md hover:bg-gray-400"
+              >
+                Close
+              </button>
+            </div>
+          </div>
+        </div>
+      )}
     </div>
   );
 };
 
 const CompletedOrdersContent: React.FC = () => {
-  const [orders, setOrders] = useState<any[]>([]);
+  const [orders, setOrders] = useState<Order[]>([]);
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState('');
 
@@ -369,6 +635,13 @@ const CompletedOrdersContent: React.FC = () => {
     }
   };
 
+  const formatCurrency = (amount: number) => {
+    return new Intl.NumberFormat('en-IN', {
+      style: 'currency',
+      currency: 'INR'
+    }).format(amount || 0);
+  };
+
   if (loading) return <div>Loading...</div>;
   if (error) return <div className="text-red-500">{error}</div>;
 
@@ -389,10 +662,10 @@ const CompletedOrdersContent: React.FC = () => {
               <tr>
                 <th className="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase">Order ID</th>
                 <th className="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase">Client</th>
-                <th className="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase">Location</th>
+                <th className="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase">Service & Location</th>
+                <th className="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase">My Earnings</th>
                 <th className="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase">Completed Date</th>
-                <th className="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase">Payment</th>
-                <th className="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase">Final Video</th>
+                <th className="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase">Payment Status</th>
               </tr>
             </thead>
             <tbody className="bg-white divide-y divide-gray-200">
@@ -402,14 +675,25 @@ const CompletedOrdersContent: React.FC = () => {
                     HMX{order.id.toString().padStart(4, '0')}
                   </td>
                   <td className="px-6 py-4 whitespace-nowrap">
-                    <div className="text-sm font-medium text-gray-900">{order.client_name || 'Unknown'}</div>
-                    <div className="text-sm text-gray-500">{order.client_email || ''}</div>
+                    <div className="text-sm font-medium text-gray-900">{order.client_name}</div>
+                    <div className="text-sm text-gray-500">{order.business_name}</div>
+                    <div className="text-xs text-gray-400">{order.client_email}</div>
                   </td>
                   <td className="px-6 py-4 text-sm text-gray-500">
-                    {order.location_address || 'N/A'}
+                    <div className="text-sm font-medium text-gray-900">{order.service_type}</div>
+                    <div className="text-sm text-gray-500 max-w-xs truncate">{order.location_details}</div>
+                    <div className="text-xs text-gray-400">{order.area_sqft} sq ft • {order.num_floors} floor(s)</div>
+                  </td>
+                  <td className="px-6 py-4 whitespace-nowrap">
+                    <div className="text-sm font-medium text-green-600">
+                      {formatCurrency(order.editor_earnings)}
+                    </div>
+                    <div className="text-xs text-gray-500">
+                      15% of {formatCurrency(order.final_cost)}
+                    </div>
                   </td>
                   <td className="px-6 py-4 whitespace-nowrap text-sm text-gray-500">
-                    {order.updated_at ? new Date(order.updated_at).toLocaleDateString() : 'N/A'}
+                    {new Date(order.created_at).toLocaleDateString()}
                   </td>
                   <td className="px-6 py-4 whitespace-nowrap">
                     <span className={`px-2 py-1 text-xs font-semibold rounded-full ${
@@ -419,21 +703,6 @@ const CompletedOrdersContent: React.FC = () => {
                     }`}>
                       {order.payment_status || 'pending'}
                     </span>
-                  </td>
-                  <td className="px-6 py-4 whitespace-nowrap text-sm">
-                    {order.delivery_video_link ? (
-                      <a
-                        href={order.delivery_video_link}
-                        target="_blank"
-                        rel="noopener noreferrer"
-                        className="text-blue-600 hover:text-blue-900 font-medium"
-                      >
-                        <Play size={16} className="inline mr-1" />
-                        Watch Video
-                      </a>
-                    ) : (
-                      <span className="text-gray-400">Not available</span>
-                    )}
                   </td>
                 </tr>
               ))}
@@ -446,7 +715,7 @@ const CompletedOrdersContent: React.FC = () => {
 };
 
 const CancelledOrdersContent: React.FC = () => {
-  const [orders, setOrders] = useState<any[]>([]);
+  const [orders, setOrders] = useState<Order[]>([]);
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState('');
 
