@@ -1,128 +1,77 @@
 import React, { useState, useEffect } from 'react';
-import { Search, Eye, Edit, Trash2, Plus, FileText, X, CheckCircle, XCircle, Users, Settings } from 'lucide-react';
+import { Search, Eye, Edit, Plus, Filter, Download, Calendar, MapPin, User, DollarSign, X, CheckCircle, Clock, AlertCircle } from 'lucide-react';
 import CreateOrderModal from './CreateOrderModal';
 
 interface Order {
   id: number;
-  booking_id: string;
-  user_id: number;
-  client_id: number;
-  client_name: string;
-  client_email: string;
-  pilot_id: number | null;
-  pilot_name: string;
-  editor_id: number | null;
-  editor_name: string;
-  referral_id: number | null;
-  referral_name: string;
-  admin_comments: string;
-  status: string;
-  total_amount: number;
-  created_at: string;
-  updated_at: string;
-  industry: string;
-  location: string;
-  requirements: string;
-  payment_status: string;
-  payment_amount: number;
-  payment_date: string;
-  completed_date: string;
+  service_type: string;
+  location_details: string;
   preferred_date: string;
   preferred_time: string;
-  location_address: string;
-  gps_coordinates: string;
-  property_type: string;
-  indoor_outdoor: string;
-  area_size: number;
-  area_unit: string;
-  area_sqft: number;
-  num_floors: number;
-  rooms_sections: number;
-  duration: number;
-  total_cost: number;
   special_requirements: string;
-  drive_link: string;
-  delivery_video_link: string;
-  drone_permissions_required: boolean;
-  fpv_tour_type: string;
-  video_length: number;
-  resolution: string;
-  background_music_voiceover: boolean;
-  editing_style: string;
-  base_package_cost: number;
-  area_covered: number;
-  shooting_hours: number;
-  editing_color_grading: boolean;
-  voiceover_script: boolean;
+  voiceover_script: string;
   background_music_licensed: boolean;
   branding_overlay: boolean;
   multiple_revisions: boolean;
-  drone_licensing_fee: boolean;
-  travel_cost: number;
-  tax_percentage: number;
-  discount_code: string;
-  discount_amount: number;
+  num_floors: number;
+  area_sqft: number;
   base_cost: number;
+  floor_cost: number;
+  addon_cost: number;
   final_cost: number;
-  custom_quote: string;
-  description: string;
-  pilot_notes: string;
-  client_notes: string;
+  pilot_earnings: number;
+  editor_earnings: number;
+  referral_earnings: number;
+  hmx_earnings: number;
+  gateway_fees: number;
+  status: string;
+  payment_status: string;
+  created_at: string;
+  client_name: string;
+  business_name: string;
+  client_email: string;
+  client_phone: string;
+  pilot_name: string;
+  pilot_email: string;
+  editor_name: string;
+  editor_email: string;
+  referral_name: string;
+  referral_email: string;
 }
 
 const Orders: React.FC = () => {
   const [orders, setOrders] = useState<Order[]>([]);
+  const [filteredOrders, setFilteredOrders] = useState<Order[]>([]);
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState<string | null>(null);
   const [searchTerm, setSearchTerm] = useState('');
+  const [statusFilter, setStatusFilter] = useState('all');
   const [selectedOrder, setSelectedOrder] = useState<Order | null>(null);
   const [showDetailsModal, setShowDetailsModal] = useState(false);
   const [showCreateModal, setShowCreateModal] = useState(false);
-  const [activeTab, setActiveTab] = useState<'pending' | 'ongoing' | 'completed' | 'cancelled'>('pending');
-  const [showAssignModal, setShowAssignModal] = useState(false);
-  const [showRejectModal, setShowRejectModal] = useState(false);
-  const [rejectReason, setRejectReason] = useState('');
-  const [pilots, setPilots] = useState<any[]>([]);
-  const [editors, setEditors] = useState<any[]>([]);
-  const [showSuccessMessage, setShowSuccessMessage] = useState(false);
-  const [successMessage, setSuccessMessage] = useState('');
 
   useEffect(() => {
     fetchOrders();
-    fetchPilots();
-    fetchEditors();
-  }, [activeTab]);
+  }, []);
+
+  useEffect(() => {
+    filterOrders();
+  }, [orders, searchTerm, statusFilter]);
 
   const fetchOrders = async () => {
     try {
-      const response = await fetch(`http://localhost:5000/api/admin/orders?status=${activeTab}`, {
+      const response = await fetch('http://localhost:5000/api/bookings', {
         headers: {
           'Authorization': `Bearer ${localStorage.getItem('token')}`
         }
       });
+      
+      if (!response.ok) {
+        throw new Error('Failed to fetch orders');
+      }
+      
       const data = await response.json();
-
-      // Debug: Log the received data
-      console.log('Received order data:', data);
-      if (data && data.length > 0) {
-        console.log('First order keys:', Object.keys(data[0]));
-        console.log('Sample field values:', {
-          property_type: data[0].property_type,
-          location_address: data[0].location_address,
-          gps_coordinates: data[0].gps_coordinates,
-          area_size: data[0].area_size,
-          preferred_time: data[0].preferred_time
-        });
-      }
-
-      if (Array.isArray(data)) {
-        setOrders(data);
-      } else if (data && typeof data === 'object') {
-        const ordersArray = Array.isArray(data.data) ? data.data : [];
-        setOrders(ordersArray);
-      } else {
-        setOrders([]);
-      }
+      setOrders(Array.isArray(data) ? data : []);
       setLoading(false);
     } catch (error) {
       setError('Failed to fetch orders');
@@ -131,94 +80,57 @@ const Orders: React.FC = () => {
     }
   };
 
-  const fetchPilots = async () => {
-    try {
-      const response = await fetch('http://localhost:5000/api/admin/pilots', {
-        headers: {
-          'Authorization': `Bearer ${localStorage.getItem('token')}`
-        }
-      });
-      const data = await response.json();
-      setPilots(Array.isArray(data) ? data : []);
-    } catch (error) {
-      console.error('Failed to fetch pilots:', error);
+  const filterOrders = () => {
+    let filtered = [...orders];
+
+    // Filter by search term
+    if (searchTerm) {
+      const term = searchTerm.toLowerCase();
+      filtered = filtered.filter(order => 
+        order.id.toString().includes(term) ||
+        order.client_name.toLowerCase().includes(term) ||
+        order.business_name.toLowerCase().includes(term) ||
+        order.service_type.toLowerCase().includes(term) ||
+        order.location_details.toLowerCase().includes(term)
+      );
+    }
+
+    // Filter by status
+    if (statusFilter !== 'all') {
+      filtered = filtered.filter(order => order.status === statusFilter);
+    }
+
+    setFilteredOrders(filtered);
+  };
+
+  const getStatusIcon = (status: string) => {
+    switch (status) {
+      case 'completed':
+        return <CheckCircle className="w-4 h-4 text-green-500" />;
+      case 'in_progress':
+        return <Clock className="w-4 h-4 text-blue-500" />;
+      case 'pending':
+        return <Clock className="w-4 h-4 text-yellow-500" />;
+      case 'cancelled':
+        return <X className="w-4 h-4 text-red-500" />;
+      default:
+        return <AlertCircle className="w-4 h-4 text-gray-500" />;
     }
   };
 
-  const fetchEditors = async () => {
-    try {
-      const response = await fetch('http://localhost:5000/api/admin/editors', {
-        headers: {
-          'Authorization': `Bearer ${localStorage.getItem('token')}`
-        }
-      });
-      const data = await response.json();
-      setEditors(Array.isArray(data) ? data : []);
-    } catch (error) {
-      console.error('Failed to fetch editors:', error);
+  const getStatusColor = (status: string) => {
+    switch (status) {
+      case 'completed':
+        return 'bg-green-100 text-green-800';
+      case 'in_progress':
+        return 'bg-blue-100 text-blue-800';
+      case 'pending':
+        return 'bg-yellow-100 text-yellow-800';
+      case 'cancelled':
+        return 'bg-red-100 text-red-800';
+      default:
+        return 'bg-gray-100 text-gray-800';
     }
-  };
-
-  const handleUpdateOrder = async (id: number, updates: any) => {
-    try {
-      const response = await fetch(`http://localhost:5000/api/admin/orders/${id}`, {
-        method: 'PUT',
-        headers: {
-          'Content-Type': 'application/json',
-          'Authorization': `Bearer ${localStorage.getItem('token')}`
-        },
-        body: JSON.stringify(updates)
-      });
-
-      if (response.ok) {
-        fetchOrders();
-        setShowAssignModal(false);
-        setShowRejectModal(false);
-      }
-    } catch (error) {
-      setError('Failed to update order');
-    }
-  };
-
-  const handleApproveOrder = (id: number) => {
-    handleUpdateOrder(id, { status: 'approved' });
-  };
-
-  const handleRejectOrder = (id: number) => {
-    if (rejectReason.trim()) {
-      handleUpdateOrder(id, {
-        status: 'cancelled',
-        admin_comments: `Rejected: ${rejectReason}`
-      });
-      setRejectReason('');
-    }
-  };
-
-  const handleRetakeOrder = (id: number) => {
-    handleUpdateOrder(id, { status: 'approved' });
-  };
-
-  const handleDeleteOrder = async (id: number) => {
-    if (!window.confirm('Are you sure you want to delete this order?')) return;
-
-    try {
-      const response = await fetch(`http://localhost:5000/api/admin/orders/${id}`, {
-        method: 'DELETE',
-        headers: {
-          'Authorization': `Bearer ${localStorage.getItem('token')}`
-        }
-      });
-      
-      if (response.ok) {
-        fetchOrders();
-      }
-    } catch (error) {
-      setError('Failed to delete order');
-    }
-  };
-
-  const handleOrderCreated = () => {
-    fetchOrders();
   };
 
   const formatCurrency = (amount: number) => {
@@ -228,602 +140,270 @@ const Orders: React.FC = () => {
     }).format(amount || 0);
   };
 
-  const filteredOrders = orders.filter(order =>
-    (order.booking_id?.toLowerCase() || '').includes(searchTerm.toLowerCase()) ||
-    (order.client_name?.toLowerCase() || '').includes(searchTerm.toLowerCase()) ||
-    (order.client_email?.toLowerCase() || '').includes(searchTerm.toLowerCase()) ||
-    (order.pilot_name?.toLowerCase() || '').includes(searchTerm.toLowerCase())
-  );
+  const handleExportCSV = () => {
+    const headers = [
+      'Order ID', 'Client Name', 'Business Name', 'Service Type', 'Location', 
+      'Area (sq ft)', 'Floors', 'Base Cost', 'Final Cost', 'Status', 'Payment Status',
+      'Pilot', 'Editor', 'Referral', 'Created Date'
+    ];
+    
+    const csvData = filteredOrders.map(order => [
+      `HMX${order.id.toString().padStart(4, '0')}`,
+      order.client_name,
+      order.business_name,
+      order.service_type,
+      order.location_details,
+      order.area_sqft,
+      order.num_floors,
+      order.base_cost,
+      order.final_cost,
+      order.status,
+      order.payment_status,
+      order.pilot_name || 'Not assigned',
+      order.editor_name || 'Not assigned',
+      order.referral_name || 'Direct',
+      new Date(order.created_at).toLocaleDateString()
+    ]);
 
-  const statusOptions = [
-    { value: 'pending', label: 'Pending', color: 'bg-yellow-100 text-yellow-800' },
-    { value: 'approved', label: 'Approved', color: 'bg-blue-100 text-blue-800' },
-    { value: 'assigned', label: 'Assigned', color: 'bg-purple-100 text-purple-800' },
-    { value: 'in_progress', label: 'In Progress', color: 'bg-orange-100 text-orange-800' },
-    { value: 'editing', label: 'Editing', color: 'bg-indigo-100 text-indigo-800' },
-    { value: 'review_changes', label: 'Review Changes', color: 'bg-pink-100 text-pink-800' },
-    { value: 'completed', label: 'Completed', color: 'bg-green-100 text-green-800' },
-    { value: 'cancelled', label: 'Cancelled', color: 'bg-red-100 text-red-800' },
-    { value: 'rejected', label: 'Rejected', color: 'bg-red-100 text-red-800' }
-  ];
+    const csvContent = [
+      headers.join(','),
+      ...csvData.map(row => row.map(cell => `"${cell}"`).join(','))
+    ].join('\n');
 
-  const getStatusColor = (status: string) => {
-    const statusOption = statusOptions.find(option => option.value === status);
-    return statusOption ? statusOption.color : 'bg-gray-100 text-gray-800';
+    const blob = new Blob([csvContent], { type: 'text/csv;charset=utf-8;' });
+    const link = document.createElement('a');
+    const url = URL.createObjectURL(blob);
+    link.setAttribute('href', url);
+    link.setAttribute('download', `orders_${new Date().toISOString().split('T')[0]}.csv`);
+    link.style.visibility = 'hidden';
+    document.body.appendChild(link);
+    link.click();
+    document.body.removeChild(link);
   };
 
-  const handleStatusChange = async (orderId: number, newStatus: string) => {
-    try {
-      await handleUpdateOrder(orderId, { status: newStatus });
-      setSuccessMessage(`Order status updated to ${newStatus}`);
-      setShowSuccessMessage(true);
-      setTimeout(() => setShowSuccessMessage(false), 3000);
-      fetchOrders(); // Refresh the orders list
-    } catch (error) {
-      console.error('Failed to update status:', error);
-    }
-  };
+  if (loading) {
+    return (
+      <div className="flex items-center justify-center h-64">
+        <div className="text-center">
+          <div className="animate-spin rounded-full h-12 w-12 border-b-2 border-primary-600 mx-auto mb-4"></div>
+          <p>Loading orders...</p>
+        </div>
+      </div>
+    );
+  }
 
-  if (loading) return <div>Loading...</div>;
-  if (error) return <div className="text-red-500">{error}</div>;
+  if (error) {
+    return (
+      <div className="bg-red-50 border border-red-200 rounded-md p-4">
+        <div className="text-red-800">{error}</div>
+      </div>
+    );
+  }
 
   return (
-    <div className="container mx-auto px-4">
-      <div className="flex justify-between items-center mb-6">
-        <h1 className="text-2xl font-bold">Order Management</h1>
-        <button
-          onClick={() => setShowCreateModal(true)}
-          className="flex items-center px-4 py-2 bg-primary-600 text-white rounded-md hover:bg-primary-700"
-        >
-          <Plus size={20} className="mr-2" />
-          New Order
-        </button>
+    <div className="space-y-6">
+      <div className="flex justify-between items-center">
+        <h2 className="text-2xl font-bold text-gray-900">Order Management</h2>
+        <div className="flex space-x-3">
+          <button
+            onClick={handleExportCSV}
+            className="inline-flex items-center px-4 py-2 border border-gray-300 rounded-md shadow-sm text-sm font-medium text-gray-700 bg-white hover:bg-gray-50"
+          >
+            <Download className="w-4 h-4 mr-2" />
+            Export CSV
+          </button>
+          <button
+            onClick={() => setShowCreateModal(true)}
+            className="inline-flex items-center px-4 py-2 border border-transparent rounded-md shadow-sm text-sm font-medium text-white bg-primary-600 hover:bg-primary-700"
+          >
+            <Plus className="w-4 h-4 mr-2" />
+            Create Order
+          </button>
+        </div>
       </div>
 
-      {/* Success Message */}
-      {showSuccessMessage && (
-        <div className="mb-4 p-4 bg-green-100 border border-green-400 text-green-700 rounded-md">
-          <div className="flex items-center">
-            <CheckCircle size={20} className="mr-2" />
-            {successMessage}
+      {/* Filters */}
+      <div className="bg-white p-4 rounded-lg shadow-sm border">
+        <div className="grid grid-cols-1 md:grid-cols-3 gap-4">
+          {/* Search */}
+          <div>
+            <label className="block text-sm font-medium text-gray-700 mb-1">
+              <Search className="w-4 h-4 inline mr-1" />
+              Search
+            </label>
+            <input
+              type="text"
+              placeholder="Order ID, client name, business..."
+              value={searchTerm}
+              onChange={(e) => setSearchTerm(e.target.value)}
+              className="w-full border border-gray-300 rounded-md px-3 py-2 text-sm"
+            />
+          </div>
+
+          {/* Status Filter */}
+          <div>
+            <label className="block text-sm font-medium text-gray-700 mb-1">
+              <Filter className="w-4 h-4 inline mr-1" />
+              Status
+            </label>
+            <select
+              value={statusFilter}
+              onChange={(e) => setStatusFilter(e.target.value)}
+              className="w-full border border-gray-300 rounded-md px-3 py-2 text-sm"
+            >
+              <option value="all">All Status</option>
+              <option value="pending">Pending</option>
+              <option value="in_progress">In Progress</option>
+              <option value="completed">Completed</option>
+              <option value="cancelled">Cancelled</option>
+            </select>
+          </div>
+
+          {/* Summary Stats */}
+          <div className="flex items-end">
+            <div className="text-sm text-gray-600">
+              <div>Total: {filteredOrders.length} orders</div>
+              <div>Revenue: {formatCurrency(filteredOrders.reduce((sum, order) => sum + order.final_cost, 0))}</div>
+            </div>
           </div>
         </div>
-      )}
-
-      {/* Tab Navigation */}
-      <div className="mb-6">
-        <div className="border-b border-gray-200">
-          <nav className="-mb-px flex space-x-8">
-            {[
-              { key: 'pending', label: 'New Orders', count: orders.length },
-              { key: 'ongoing', label: 'Ongoing Orders', count: 0 },
-              { key: 'completed', label: 'Completed Orders', count: 0 },
-              { key: 'cancelled', label: 'Cancelled Orders', count: 0 }
-            ].map((tab) => (
-              <button
-                key={tab.key}
-                onClick={() => setActiveTab(tab.key as any)}
-                className={`py-2 px-1 border-b-2 font-medium text-sm ${
-                  activeTab === tab.key
-                    ? 'border-primary-500 text-primary-600'
-                    : 'border-transparent text-gray-500 hover:text-gray-700 hover:border-gray-300'
-                }`}
-              >
-                {tab.label}
-                {activeTab === tab.key && (
-                  <span className="ml-2 bg-primary-100 text-primary-600 py-0.5 px-2 rounded-full text-xs">
-                    {filteredOrders.length}
-                  </span>
-                )}
-              </button>
-            ))}
-          </nav>
-        </div>
       </div>
 
-      {/* Search Bar */}
-      <div className="mb-6">
-        <div className="relative">
-          <input
-            type="text"
-            placeholder="Search orders..."
-            value={searchTerm}
-            onChange={(e) => setSearchTerm(e.target.value)}
-            className="w-full px-4 py-2 pl-10 border rounded-md"
-          />
-          <Search size={20} className="absolute left-3 top-2.5 text-gray-400" />
-        </div>
-      </div>
-
-
-
-      {/* Tab Content */}
-      {activeTab === 'pending' && (
-        <div className="bg-white rounded-lg shadow overflow-hidden">
-          <table className="min-w-full divide-y divide-gray-200">
-            <thead className="bg-gray-50">
-              <tr>
-                <th className="px-4 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">Order ID</th>
-                <th className="px-4 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">Client</th>
-                <th className="px-4 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">Property Type</th>
-                <th className="px-4 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">Location</th>
-                <th className="px-4 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">Preferred Date</th>
-                <th className="px-4 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">Total Cost</th>
-                <th className="px-4 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">Pilot</th>
-                <th className="px-4 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">Editor</th>
-                <th className="px-4 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">Referral</th>
-                <th className="px-4 py-3 text-right text-xs font-medium text-gray-500 uppercase tracking-wider">Actions</th>
-              </tr>
-            </thead>
-            <tbody className="bg-white divide-y divide-gray-200">
-              {filteredOrders.length === 0 ? (
+      {/* Orders Table */}
+      <div className="bg-white rounded-lg shadow-sm border">
+        {filteredOrders.length === 0 ? (
+          <div className="p-8 text-center text-gray-500">
+            <FileText className="w-12 h-12 mx-auto mb-4 text-gray-300" />
+            <p>No orders found matching your criteria.</p>
+          </div>
+        ) : (
+          <div className="overflow-x-auto">
+            <table className="w-full">
+              <thead className="bg-gray-50 border-b">
                 <tr>
-                  <td colSpan={10} className="px-4 py-8 text-center text-gray-500">
-                    <div className="text-lg font-medium mb-2">No pending orders found</div>
-                    <div className="text-sm">
-                      Orders will appear here when clients submit new bookings from the Client Dashboard.
-                      <br />
-                      Make sure clients are creating bookings with status 'pending'.
-                    </div>
-                  </td>
+                  <th className="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">
+                    Order Details
+                  </th>
+                  <th className="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">
+                    Client
+                  </th>
+                  <th className="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">
+                    Service & Location
+                  </th>
+                  <th className="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">
+                    Team
+                  </th>
+                  <th className="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">
+                    Cost & Status
+                  </th>
+                  <th className="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">
+                    Actions
+                  </th>
                 </tr>
-              ) : (
-                filteredOrders.filter(order => order.status === 'pending').map((order) => (
-                <tr key={order.id}>
-                  <td className="px-4 py-4 whitespace-nowrap">
-                    <div className="text-sm font-medium text-blue-600">{order.booking_id}</div>
-                  </td>
-                  <td className="px-4 py-4 whitespace-nowrap">
-                    {order.client_id ? (
-                      <div>
-                        <a
-                          href={`/admin/clients/${order.client_id}`}
-                          className="text-blue-600 hover:text-blue-900 underline font-medium"
-                        >
-                          {order.client_name}
-                        </a>
-                        <div className="text-xs text-gray-500">{order.client_email}</div>
+              </thead>
+              <tbody className="bg-white divide-y divide-gray-200">
+                {filteredOrders.map((order) => (
+                  <tr key={order.id} className="hover:bg-gray-50">
+                    <td className="px-6 py-4 whitespace-nowrap">
+                      <div className="flex items-center">
+                        <Calendar className="w-5 h-5 text-gray-400 mr-3" />
+                        <div>
+                          <div className="text-sm font-medium text-gray-900">
+                            HMX{order.id.toString().padStart(4, '0')}
+                          </div>
+                          <div className="text-sm text-gray-500">
+                            {order.preferred_date ? new Date(order.preferred_date).toLocaleDateString() : 'Date TBD'}
+                          </div>
+                          <div className="text-xs text-gray-400">
+                            {order.area_sqft} sq ft • {order.num_floors} floor(s)
+                          </div>
+                        </div>
                       </div>
-                    ) : (
-                      <span className="text-gray-500">No Client</span>
-                    )}
-                  </td>
-                  <td className="px-4 py-4 whitespace-nowrap">
-                    <div className="text-sm text-gray-900">{order.property_type || order.industry || 'Not specified'}</div>
-                  </td>
-                  <td className="px-4 py-4">
-                    <div className="text-sm text-gray-900 max-w-24 truncate">
-                      {(order.location_address || order.location || 'Not specified').length > 20
-                        ? (order.location_address || order.location || 'Not specified').substring(0, 20) + '...'
-                        : (order.location_address || order.location || 'Not specified')
-                      }
-                    </div>
-                  </td>
-                  <td className="px-4 py-4 whitespace-nowrap">
-                    <div className="text-sm text-gray-900">
-                      {order.preferred_date ? new Date(order.preferred_date).toLocaleDateString() : 'Not specified'}
-                    </div>
-                  </td>
-                  <td className="px-4 py-4 whitespace-nowrap">
-                    <div className="text-sm font-medium text-gray-900">
-                      {formatCurrency(order.total_cost || order.total_amount || 0)}
-                    </div>
-                  </td>
-                  <td className="px-4 py-4 whitespace-nowrap">
-                    {order.pilot_id ? (
-                      <a
-                        href={`/admin/pilots/${order.pilot_id}`}
-                        className="text-blue-600 hover:text-blue-900 underline text-sm"
-                      >
-                        {order.pilot_name}
-                      </a>
-                    ) : (
-                      <span className="text-gray-500 text-sm">Unassigned</span>
-                    )}
-                  </td>
-                  <td className="px-4 py-4 whitespace-nowrap">
-                    {order.editor_id ? (
-                      <a
-                        href={`/admin/editors/${order.editor_id}`}
-                        className="text-blue-600 hover:text-blue-900 underline text-sm"
-                      >
-                        {order.editor_name}
-                      </a>
-                    ) : (
-                      <span className="text-gray-500 text-sm">Unassigned</span>
-                    )}
-                  </td>
-                  <td className="px-4 py-4 whitespace-nowrap">
-                    {order.referral_id ? (
-                      <span className="text-sm text-gray-900">{order.referral_name || `REF-${order.referral_id}`}</span>
-                    ) : (
-                      <span className="text-gray-500 text-sm">None</span>
-                    )}
-                  </td>
-                  <td className="px-6 py-4 whitespace-nowrap text-right text-sm font-medium">
-                    <div className="flex justify-end space-x-2">
+                    </td>
+                    <td className="px-6 py-4 whitespace-nowrap">
+                      <div className="flex items-center">
+                        <User className="w-5 h-5 text-gray-400 mr-3" />
+                        <div>
+                          <div className="text-sm font-medium text-gray-900">{order.client_name}</div>
+                          <div className="text-sm text-gray-500">{order.business_name}</div>
+                          <div className="text-xs text-gray-400">{order.client_email}</div>
+                        </div>
+                      </div>
+                    </td>
+                    <td className="px-6 py-4">
+                      <div className="flex items-start">
+                        <MapPin className="w-5 h-5 text-gray-400 mr-3 mt-0.5" />
+                        <div>
+                          <div className="text-sm font-medium text-gray-900">{order.service_type}</div>
+                          <div className="text-sm text-gray-500 max-w-xs truncate">{order.location_details}</div>
+                          {(order.special_requirements || order.voiceover_script || 
+                            order.background_music_licensed || order.branding_overlay || 
+                            order.multiple_revisions) && (
+                            <div className="text-xs text-blue-600 mt-1">Enhanced features included</div>
+                          )}
+                        </div>
+                      </div>
+                    </td>
+                    <td className="px-6 py-4 whitespace-nowrap">
+                      <div className="text-xs space-y-1">
+                        <div>
+                          <span className="font-medium">Pilot:</span> {order.pilot_name || 'Not assigned'}
+                        </div>
+                        <div>
+                          <span className="font-medium">Editor:</span> {order.editor_name || 'Not assigned'}
+                        </div>
+                        <div>
+                          <span className="font-medium">Referral:</span> {order.referral_name || 'Direct'}
+                        </div>
+                      </div>
+                    </td>
+                    <td className="px-6 py-4 whitespace-nowrap">
+                      <div className="flex items-center">
+                        <DollarSign className="w-4 h-4 text-green-500 mr-1" />
+                        <div>
+                          <div className="text-sm font-medium text-gray-900">
+                            {formatCurrency(order.final_cost)}
+                          </div>
+                          <div className="flex items-center mt-1">
+                            {getStatusIcon(order.status)}
+                            <span className={`ml-1 inline-flex items-center px-2.5 py-0.5 rounded-full text-xs font-medium ${getStatusColor(order.status)}`}>
+                              {order.status.replace('_', ' ')}
+                            </span>
+                          </div>
+                          <div className="text-xs text-gray-500 mt-1">
+                            Payment: {order.payment_status}
+                          </div>
+                        </div>
+                      </div>
+                    </td>
+                    <td className="px-6 py-4 whitespace-nowrap text-sm font-medium">
                       <button
                         onClick={() => {
                           setSelectedOrder(order);
                           setShowDetailsModal(true);
                         }}
-                        className="text-blue-600 hover:text-blue-900"
-                        title="View Details"
+                        className="inline-flex items-center px-3 py-1 border border-transparent text-sm leading-4 font-medium rounded-md text-blue-700 bg-blue-100 hover:bg-blue-200"
                       >
-                        <Eye size={16} />
+                        <Eye className="w-4 h-4 mr-1" />
+                        View
                       </button>
-                      <button
-                        onClick={() => handleDeleteOrder(order.id)}
-                        className="text-red-600 hover:text-red-900"
-                        title="Delete"
-                      >
-                        <Trash2 size={16} />
-                      </button>
-                      <button
-                        onClick={() => handleApproveOrder(order.id)}
-                        className="text-green-600 hover:text-green-900"
-                        title="Approve"
-                      >
-                        <CheckCircle size={16} />
-                      </button>
-                      <button
-                        onClick={() => {
-                          setSelectedOrder(order);
-                          setShowRejectModal(true);
-                        }}
-                        className="text-red-600 hover:text-red-900"
-                        title="Reject"
-                      >
-                        <XCircle size={16} />
-                      </button>
-                    </div>
-                  </td>
-                </tr>
-                ))
-              )}
-            </tbody>
-          </table>
-        </div>
-      )}
-
-      {/* Ongoing Orders Tab */}
-      {activeTab === 'ongoing' && (
-        <div className="bg-white rounded-lg shadow overflow-hidden">
-          <table className="min-w-full divide-y divide-gray-200">
-            <thead className="bg-gray-50">
-              <tr>
-                <th className="px-4 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">Order ID</th>
-                <th className="px-4 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">Client</th>
-                <th className="px-4 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">Property</th>
-                <th className="px-4 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">Shoot Date</th>
-                <th className="px-4 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">Pilot</th>
-                <th className="px-4 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">Editor</th>
-                <th className="px-4 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">Status</th>
-                <th className="px-4 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">Video Status</th>
-                <th className="px-4 py-3 text-right text-xs font-medium text-gray-500 uppercase tracking-wider">Actions</th>
-              </tr>
-            </thead>
-            <tbody className="bg-white divide-y divide-gray-200">
-              {filteredOrders.map((order) => (
-                <tr key={order.id}>
-                  <td className="px-4 py-4 whitespace-nowrap">
-                    <div className="text-sm font-medium text-blue-600">{order.booking_id}</div>
-                  </td>
-                  <td className="px-4 py-4 whitespace-nowrap">
-                    {order.client_id ? (
-                      <div>
-                        <a
-                          href={`/admin/clients/${order.client_id}`}
-                          className="text-blue-600 hover:text-blue-900 underline font-medium"
-                        >
-                          {order.client_name}
-                        </a>
-                        <div className="text-xs text-gray-500">{order.client_email}</div>
-                      </div>
-                    ) : (
-                      <span className="text-gray-500">No Client</span>
-                    )}
-                  </td>
-                  <td className="px-4 py-4 whitespace-nowrap">
-                    <div className="text-sm text-gray-900 max-w-20 truncate">{order.property_type || order.industry || 'Not specified'}</div>
-                    <div className="text-xs text-gray-500">{order.area_size ? `${order.area_size} ${order.area_unit || 'sq_ft'}` : ''}</div>
-                  </td>
-                  <td className="px-4 py-4 whitespace-nowrap">
-                    <div className="text-sm text-gray-900">
-                      {order.preferred_date ? new Date(order.preferred_date).toLocaleDateString() : 'Not set'}
-                    </div>
-                    <div className="text-xs text-gray-500">{order.preferred_time || ''}</div>
-                  </td>
-                  <td className="px-4 py-4 whitespace-nowrap">
-                    {order.pilot_id ? (
-                      <a
-                        href={`/admin/pilots/${order.pilot_id}`}
-                        className="text-blue-600 hover:text-blue-900 underline text-sm"
-                      >
-                        {order.pilot_name}
-                      </a>
-                    ) : (
-                      <span className="text-red-500 text-sm">Unassigned</span>
-                    )}
-                  </td>
-                  <td className="px-4 py-4 whitespace-nowrap">
-                    {order.editor_id ? (
-                      <a
-                        href={`/admin/editors/${order.editor_id}`}
-                        className="text-blue-600 hover:text-blue-900 underline text-sm"
-                      >
-                        {order.editor_name}
-                      </a>
-                    ) : (
-                      <span className="text-red-500 text-sm">Unassigned</span>
-                    )}
-                  </td>
-                  <td className="px-4 py-4 whitespace-nowrap">
-                    <select
-                      value={order.status}
-                      onChange={(e) => handleStatusChange(order.id, e.target.value)}
-                      className={`px-2 py-1 text-xs font-semibold rounded-md border border-gray-300 focus:ring-2 focus:ring-primary-500 focus:border-primary-500 cursor-pointer ${getStatusColor(order.status)}`}
-                      title="Click to change status"
-                    >
-                      {statusOptions.map((option) => (
-                        <option key={option.value} value={option.value} className="bg-white text-gray-900">
-                          {option.label}
-                        </option>
-                      ))}
-                    </select>
-                  </td>
-                  <td className="px-4 py-4 whitespace-nowrap">
-                    <div className="text-sm">
-                      {order.drive_link ? (
-                        <a href={order.drive_link} target="_blank" rel="noopener noreferrer" className="text-green-600 hover:text-green-900">
-                          Raw Video ✓
-                        </a>
-                      ) : (
-                        <span className="text-gray-500">Pending</span>
-                      )}
-                    </div>
-                    <div className="text-xs">
-                      {order.delivery_video_link ? (
-                        <a href={order.delivery_video_link} target="_blank" rel="noopener noreferrer" className="text-blue-600 hover:text-blue-900">
-                          Final Video ✓
-                        </a>
-                      ) : (
-                        <span className="text-gray-500">Editing</span>
-                      )}
-                    </div>
-                  </td>
-                  <td className="px-6 py-4 whitespace-nowrap text-right text-sm font-medium">
-                    <div className="flex justify-end space-x-2">
-                      <button
-                        onClick={() => {
-                          setSelectedOrder(order);
-                          setShowDetailsModal(true);
-                        }}
-                        className="text-blue-600 hover:text-blue-900"
-                        title="View Details"
-                      >
-                        <Eye size={16} />
-                      </button>
-                      <button
-                        onClick={() => {
-                          setSelectedOrder(order);
-                          setShowAssignModal(true);
-                        }}
-                        className="text-purple-600 hover:text-purple-900"
-                        title="Manage Assignments"
-                      >
-                        <Settings size={16} />
-                      </button>
-                    </div>
-                  </td>
-                </tr>
-              ))}
-            </tbody>
-          </table>
-        </div>
-      )}
-
-      {/* Completed Orders Tab */}
-      {activeTab === 'completed' && (
-        <div className="bg-white rounded-lg shadow overflow-hidden">
-          <table className="min-w-full divide-y divide-gray-200">
-            <thead className="bg-gray-50">
-              <tr>
-                <th className="px-4 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">Order ID</th>
-                <th className="px-4 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">Client</th>
-                <th className="px-4 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">Property</th>
-                <th className="px-4 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">Pilot</th>
-                <th className="px-4 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">Editor</th>
-                <th className="px-4 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">Amount</th>
-                <th className="px-4 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">Videos</th>
-                <th className="px-4 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">Completed</th>
-                <th className="px-4 py-3 text-right text-xs font-medium text-gray-500 uppercase tracking-wider">Actions</th>
-              </tr>
-            </thead>
-            <tbody className="bg-white divide-y divide-gray-200">
-              {filteredOrders.map((order) => (
-                <tr key={order.id}>
-                  <td className="px-4 py-4 whitespace-nowrap">
-                    <div className="text-sm font-medium text-blue-600">{order.booking_id}</div>
-                  </td>
-                  <td className="px-4 py-4 whitespace-nowrap">
-                    {order.client_id ? (
-                      <div>
-                        <a
-                          href={`/admin/clients/${order.client_id}`}
-                          className="text-blue-600 hover:text-blue-900 underline font-medium"
-                        >
-                          {order.client_name}
-                        </a>
-                        <div className="text-xs text-gray-500">{order.client_email}</div>
-                      </div>
-                    ) : (
-                      <span className="text-gray-500">No Client</span>
-                    )}
-                  </td>
-                  <td className="px-4 py-4 whitespace-nowrap">
-                    <div className="text-sm text-gray-900 max-w-20 truncate">{order.property_type || order.industry || 'Not specified'}</div>
-                    <div className="text-xs text-gray-500 max-w-20 truncate">{order.location_address || order.location}</div>
-                  </td>
-                  <td className="px-4 py-4 whitespace-nowrap">
-                    {order.pilot_id ? (
-                      <a
-                        href={`/admin/pilots/${order.pilot_id}`}
-                        className="text-blue-600 hover:text-blue-900 underline text-sm"
-                      >
-                        {order.pilot_name}
-                      </a>
-                    ) : (
-                      <span className="text-gray-500">No Pilot</span>
-                    )}
-                  </td>
-                  <td className="px-4 py-4 whitespace-nowrap">
-                    {order.editor_id ? (
-                      <a
-                        href={`/admin/editors/${order.editor_id}`}
-                        className="text-blue-600 hover:text-blue-900 underline text-sm"
-                      >
-                        {order.editor_name}
-                      </a>
-                    ) : (
-                      <span className="text-gray-500">No Editor</span>
-                    )}
-                  </td>
-                  <td className="px-4 py-4 whitespace-nowrap">
-                    <div className="text-sm font-medium text-gray-900">
-                      {formatCurrency(order.total_cost || order.total_amount || 0)}
-                    </div>
-                    <div className="text-xs text-gray-500">
-                      {order.payment_status === 'completed' ? 'Paid' : 'Pending'}
-                    </div>
-                  </td>
-                  <td className="px-4 py-4 whitespace-nowrap">
-                    <div className="space-y-1">
-                      {order.drive_link && (
-                        <a href={order.drive_link} target="_blank" rel="noopener noreferrer" className="block text-xs text-green-600 hover:text-green-900">
-                          Raw Video ✓
-                        </a>
-                      )}
-                      {order.delivery_video_link && (
-                        <a href={order.delivery_video_link} target="_blank" rel="noopener noreferrer" className="block text-xs text-blue-600 hover:text-blue-900">
-                          Final Video ✓
-                        </a>
-                      )}
-                    </div>
-                  </td>
-                  <td className="px-4 py-4 whitespace-nowrap">
-                    <div className="text-sm text-gray-900">
-                      {new Date(order.created_at).toLocaleDateString()}
-                    </div>
-                  </td>
-                  <td className="px-6 py-4 whitespace-nowrap text-right text-sm font-medium">
-                    <button
-                      onClick={() => {
-                        setSelectedOrder(order);
-                        setShowDetailsModal(true);
-                      }}
-                      className="text-blue-600 hover:text-blue-900"
-                      title="View Details"
-                    >
-                      <Eye size={16} />
-                    </button>
-                  </td>
-                </tr>
-              ))}
-            </tbody>
-          </table>
-        </div>
-      )}
-
-      {/* Cancelled Orders Tab */}
-      {activeTab === 'cancelled' && (
-        <div className="bg-white rounded-lg shadow overflow-hidden">
-          <table className="min-w-full divide-y divide-gray-200">
-            <thead className="bg-gray-50">
-              <tr>
-                <th className="px-4 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">Order ID</th>
-                <th className="px-4 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">Client</th>
-                <th className="px-4 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">Property</th>
-                <th className="px-4 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">Admin Comments</th>
-                <th className="px-4 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">Amount</th>
-                <th className="px-4 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">Cancelled Date</th>
-                <th className="px-4 py-3 text-right text-xs font-medium text-gray-500 uppercase tracking-wider">Actions</th>
-              </tr>
-            </thead>
-            <tbody className="bg-white divide-y divide-gray-200">
-              {filteredOrders.map((order) => (
-                <tr key={order.id}>
-                  <td className="px-4 py-4 whitespace-nowrap">
-                    <div className="text-sm font-medium text-red-600">{order.booking_id}</div>
-                  </td>
-                  <td className="px-4 py-4 whitespace-nowrap">
-                    {order.client_id ? (
-                      <div>
-                        <a
-                          href={`/admin/clients/${order.client_id}`}
-                          className="text-blue-600 hover:text-blue-900 underline font-medium"
-                        >
-                          {order.client_name}
-                        </a>
-                        <div className="text-xs text-gray-500">{order.client_email}</div>
-                      </div>
-                    ) : (
-                      <span className="text-gray-500">No Client</span>
-                    )}
-                  </td>
-                  <td className="px-4 py-4 whitespace-nowrap">
-                    <div className="text-sm text-gray-900 max-w-20 truncate">{order.property_type || order.industry || 'Not specified'}</div>
-                    <div className="text-xs text-gray-500 max-w-20 truncate">{order.location_address || order.location}</div>
-                  </td>
-                  <td className="px-4 py-4">
-                    <div className="text-sm text-gray-900 max-w-xs">
-                      {order.admin_comments || 'No comments provided'}
-                    </div>
-                  </td>
-                  <td className="px-4 py-4 whitespace-nowrap">
-                    <div className="text-sm font-medium text-gray-900">
-                      {formatCurrency(order.total_cost || order.total_amount || 0)}
-                    </div>
-                  </td>
-                  <td className="px-4 py-4 whitespace-nowrap">
-                    <div className="text-sm text-gray-900">
-                      {new Date(order.created_at).toLocaleDateString()}
-                    </div>
-                  </td>
-                  <td className="px-6 py-4 whitespace-nowrap text-right text-sm font-medium">
-                    <div className="flex justify-end space-x-2">
-                      <button
-                        onClick={() => {
-                          setSelectedOrder(order);
-                          setShowDetailsModal(true);
-                        }}
-                        className="text-blue-600 hover:text-blue-900"
-                        title="View Details"
-                      >
-                        <Eye size={16} />
-                      </button>
-                      <button
-                        onClick={() => handleRetakeOrder(order.id)}
-                        className="text-green-600 hover:text-green-900"
-                        title="Retake Order"
-                      >
-                        <CheckCircle size={16} />
-                      </button>
-                    </div>
-                  </td>
-                </tr>
-              ))}
-            </tbody>
-          </table>
-        </div>
-      )}
+                    </td>
+                  </tr>
+                ))}
+              </tbody>
+            </table>
+          </div>
+        )}
+      </div>
 
       {/* Order Details Modal */}
       {showDetailsModal && selectedOrder && (
-        <div className="fixed inset-0 bg-black bg-opacity-50 flex items-center justify-center z-50">
-          <div className="bg-white rounded-lg shadow-xl max-w-6xl w-full mx-4 max-h-[95vh] overflow-y-auto">
-            <div className="flex justify-between items-center p-6 border-b bg-gray-50">
-              <h2 className="text-2xl font-bold text-gray-800">Complete Order Details - {selectedOrder.booking_id}</h2>
+        <div className="fixed inset-0 bg-gray-600 bg-opacity-50 overflow-y-auto h-full w-full z-50">
+          <div className="relative top-20 mx-auto p-5 border w-11/12 max-w-6xl shadow-lg rounded-md bg-white">
+            <div className="flex justify-between items-center mb-4">
+              <h3 className="text-lg font-bold text-gray-900">
+                Order Details - HMX{selectedOrder.id.toString().padStart(4, '0')}
+              </h3>
               <button
                 onClick={() => setShowDetailsModal(false)}
                 className="text-gray-400 hover:text-gray-600"
@@ -831,470 +411,166 @@ const Orders: React.FC = () => {
                 <X size={24} />
               </button>
             </div>
-            <div className="p-6">
-              <div className="grid grid-cols-3 gap-6">
 
-                {/* Basic Information */}
+            <div className="grid grid-cols-1 md:grid-cols-3 gap-6">
+              {/* Basic Information */}
+              <div className="space-y-4">
+                <h4 className="font-semibold text-gray-900 border-b pb-2">Basic Information</h4>
+                <div>
+                  <label className="block text-sm font-medium text-gray-700">Service Type</label>
+                  <p className="mt-1 text-sm text-gray-900">{selectedOrder.service_type}</p>
+                </div>
+                <div>
+                  <label className="block text-sm font-medium text-gray-700">Location</label>
+                  <p className="mt-1 text-sm text-gray-900">{selectedOrder.location_details}</p>
+                </div>
+                <div>
+                  <label className="block text-sm font-medium text-gray-700">Preferred Date & Time</label>
+                  <p className="mt-1 text-sm text-gray-900">
+                    {selectedOrder.preferred_date ? new Date(selectedOrder.preferred_date).toLocaleDateString() : 'Not set'}
+                    {selectedOrder.preferred_time && ` at ${selectedOrder.preferred_time}`}
+                  </p>
+                </div>
+                <div>
+                  <label className="block text-sm font-medium text-gray-700">Area & Floors</label>
+                  <p className="mt-1 text-sm text-gray-900">
+                    {selectedOrder.area_sqft} sq ft, {selectedOrder.num_floors} floor(s)
+                  </p>
+                </div>
+                <div>
+                  <label className="block text-sm font-medium text-gray-700">Status</label>
+                  <span className={`inline-flex items-center px-2.5 py-0.5 rounded-full text-xs font-medium ${getStatusColor(selectedOrder.status)}`}>
+                    {getStatusIcon(selectedOrder.status)}
+                    <span className="ml-1">{selectedOrder.status.replace('_', ' ')}</span>
+                  </span>
+                </div>
+              </div>
+
+              {/* Enhanced Features */}
+              <div className="space-y-4">
+                <h4 className="font-semibold text-gray-900 border-b pb-2">Enhanced Features</h4>
+                <div>
+                  <label className="block text-sm font-medium text-gray-700">Special Requirements</label>
+                  <p className="mt-1 text-sm text-gray-900">{selectedOrder.special_requirements || 'None'}</p>
+                </div>
+                <div>
+                  <label className="block text-sm font-medium text-gray-700">Voiceover Script</label>
+                  <p className="mt-1 text-sm text-gray-900">{selectedOrder.voiceover_script || 'None'}</p>
+                </div>
+                <div className="space-y-2">
+                  <div className="flex items-center">
+                    <span className="text-sm font-medium text-gray-700 w-32">Licensed Music:</span>
+                    <span className={`text-sm ${selectedOrder.background_music_licensed ? 'text-green-600' : 'text-gray-500'}`}>
+                      {selectedOrder.background_music_licensed ? 'Yes' : 'No'}
+                    </span>
+                  </div>
+                  <div className="flex items-center">
+                    <span className="text-sm font-medium text-gray-700 w-32">Branding Overlay:</span>
+                    <span className={`text-sm ${selectedOrder.branding_overlay ? 'text-green-600' : 'text-gray-500'}`}>
+                      {selectedOrder.branding_overlay ? 'Yes' : 'No'}
+                    </span>
+                  </div>
+                  <div className="flex items-center">
+                    <span className="text-sm font-medium text-gray-700 w-32">Multiple Revisions:</span>
+                    <span className={`text-sm ${selectedOrder.multiple_revisions ? 'text-green-600' : 'text-gray-500'}`}>
+                      {selectedOrder.multiple_revisions ? 'Yes' : 'No'}
+                    </span>
+                  </div>
+                </div>
+              </div>
+
+              {/* Cost & Team */}
+              <div className="space-y-4">
+                <h4 className="font-semibold text-gray-900 border-b pb-2">Cost & Team</h4>
+                
+                {/* Cost Breakdown */}
+                <div className="bg-gray-50 p-4 rounded-lg">
+                  <h5 className="font-medium text-gray-900 mb-2">Cost Breakdown</h5>
+                  <div className="space-y-1 text-sm">
+                    <div className="flex justify-between">
+                      <span>Base Cost:</span>
+                      <span>{formatCurrency(selectedOrder.base_cost)}</span>
+                    </div>
+                    {selectedOrder.floor_cost > 0 && (
+                      <div className="flex justify-between">
+                        <span>Additional Floors:</span>
+                        <span>{formatCurrency(selectedOrder.floor_cost)}</span>
+                      </div>
+                    )}
+                    {selectedOrder.addon_cost > 0 && (
+                      <div className="flex justify-between">
+                        <span>Add-ons:</span>
+                        <span>{formatCurrency(selectedOrder.addon_cost)}</span>
+                      </div>
+                    )}
+                    <div className="flex justify-between border-t pt-1 font-semibold">
+                      <span>Total:</span>
+                      <span className="text-primary-600">{formatCurrency(selectedOrder.final_cost)}</span>
+                    </div>
+                  </div>
+                </div>
+
+                {/* Earnings Distribution */}
                 <div className="bg-blue-50 p-4 rounded-lg">
-                  <h3 className="font-bold text-blue-800 mb-3 text-lg">📋 Basic Information</h3>
-                  <div className="space-y-3">
-                    <div>
-                      <span className="text-sm font-medium text-gray-600">Order ID:</span>
-                      <p className="text-gray-900 font-semibold">{selectedOrder.booking_id}</p>
+                  <h5 className="font-medium text-gray-900 mb-2">Earnings Distribution</h5>
+                  <div className="space-y-1 text-xs">
+                    <div className="flex justify-between">
+                      <span>Pilot (50%):</span>
+                      <span>{formatCurrency(selectedOrder.pilot_earnings)}</span>
                     </div>
-                    <div>
-                      <span className="text-sm font-medium text-gray-600">Internal ID:</span>
-                      <p className="text-gray-900">{selectedOrder.id}</p>
+                    <div className="flex justify-between">
+                      <span>Editor (15%):</span>
+                      <span>{formatCurrency(selectedOrder.editor_earnings)}</span>
                     </div>
-                    <div>
-                      <span className="text-sm font-medium text-gray-600">Status:</span>
-                      <select
-                        value={selectedOrder.status}
-                        onChange={(e) => {
-                          handleStatusChange(selectedOrder.id, e.target.value);
-                          setSelectedOrder({...selectedOrder, status: e.target.value});
-                        }}
-                        className={`ml-2 px-3 py-1 text-sm font-semibold rounded-md border border-gray-300 focus:ring-2 focus:ring-primary-500 focus:border-primary-500 cursor-pointer ${getStatusColor(selectedOrder.status)}`}
-                        title="Click to change status"
-                      >
-                        {statusOptions.map((option) => (
-                          <option key={option.value} value={option.value} className="bg-white text-gray-900">
-                            {option.label}
-                          </option>
-                        ))}
-                      </select>
+                    <div className="flex justify-between">
+                      <span>Referral (12.5%):</span>
+                      <span>{formatCurrency(selectedOrder.referral_earnings)}</span>
                     </div>
-                    <div>
-                      <span className="text-sm font-medium text-gray-600">Created Date:</span>
-                      <p className="text-gray-900">{new Date(selectedOrder.created_at).toLocaleString()}</p>
+                    <div className="flex justify-between">
+                      <span>HMX (20%):</span>
+                      <span>{formatCurrency(selectedOrder.hmx_earnings)}</span>
                     </div>
-                    <div>
-                      <span className="text-sm font-medium text-gray-600">Last Updated:</span>
-                      <p className="text-gray-900">{selectedOrder.updated_at ? new Date(selectedOrder.updated_at).toLocaleString() : 'Not updated'}</p>
+                    <div className="flex justify-between">
+                      <span>Gateway (2.5%):</span>
+                      <span>{formatCurrency(selectedOrder.gateway_fees)}</span>
                     </div>
                   </div>
                 </div>
 
-                {/* Client Information */}
-                <div className="bg-green-50 p-4 rounded-lg">
-                  <h3 className="font-bold text-green-800 mb-3 text-lg">👤 Client Information</h3>
-                  <div className="space-y-3">
+                {/* Team Assignment */}
+                <div>
+                  <h5 className="font-medium text-gray-900 mb-2">Team Assignment</h5>
+                  <div className="space-y-2 text-sm">
                     <div>
-                      <span className="text-sm font-medium text-gray-600">Client ID:</span>
-                      <p className="text-gray-900">{selectedOrder.client_id || 'Not assigned'}</p>
-                    </div>
-                    <div>
-                      <span className="text-sm font-medium text-gray-600">Client Name:</span>
-                      <p className="text-gray-900 font-semibold">{selectedOrder.client_name || 'Unknown'}</p>
-                    </div>
-                    <div>
-                      <span className="text-sm font-medium text-gray-600">Email:</span>
-                      <p className="text-gray-900">{selectedOrder.client_email || 'Not provided'}</p>
-                    </div>
-                    <div>
-                      <span className="text-sm font-medium text-gray-600">User ID:</span>
-                      <p className="text-gray-900">{selectedOrder.user_id || 'Not linked'}</p>
-                    </div>
-                  </div>
-                </div>
-
-                {/* Assignment Information */}
-                <div className="bg-purple-50 p-4 rounded-lg">
-                  <h3 className="font-bold text-purple-800 mb-3 text-lg">👥 Team Assignment</h3>
-                  <div className="space-y-3">
-                    <div>
-                      <span className="text-sm font-medium text-gray-600">Pilot ID:</span>
-                      <p className="text-gray-900">{selectedOrder.pilot_id || 'Unassigned'}</p>
-                    </div>
-                    <div>
-                      <span className="text-sm font-medium text-gray-600">Pilot Name:</span>
-                      <p className="text-gray-900 font-semibold">{selectedOrder.pilot_name || 'Unassigned'}</p>
-                    </div>
-                    <div>
-                      <span className="text-sm font-medium text-gray-600">Editor ID:</span>
-                      <p className="text-gray-900">{selectedOrder.editor_id || 'Unassigned'}</p>
-                    </div>
-                    <div>
-                      <span className="text-sm font-medium text-gray-600">Editor Name:</span>
-                      <p className="text-gray-900 font-semibold">{selectedOrder.editor_name || 'Unassigned'}</p>
-                    </div>
-                    <div>
-                      <span className="text-sm font-medium text-gray-600">Referral ID:</span>
-                      <p className="text-gray-900">{selectedOrder.referral_id || 'None'}</p>
-                    </div>
-                    <div>
-                      <span className="text-sm font-medium text-gray-600">Referral Name:</span>
-                      <p className="text-gray-900">{selectedOrder.referral_name || 'None'}</p>
-                    </div>
-                  </div>
-                </div>
-
-                {/* Location & Property Details */}
-                <div className="bg-yellow-50 p-4 rounded-lg col-span-2">
-                  <h3 className="font-bold text-yellow-800 mb-3 text-lg">📍 Location & Property Details</h3>
-                  <div className="grid grid-cols-2 gap-4">
-                    <div>
-                      <span className="text-sm font-medium text-gray-600">Full Address:</span>
-                      <p className="text-gray-900">{selectedOrder.location_address || selectedOrder.location || 'Not specified'}</p>
-                    </div>
-                    <div>
-                      <span className="text-sm font-medium text-gray-600">GPS Coordinates:</span>
-                      <p className="text-gray-900">{selectedOrder.gps_coordinates || 'Not provided'}</p>
-                    </div>
-                    <div>
-                      <span className="text-sm font-medium text-gray-600">Property Type:</span>
-                      <p className="text-gray-900">{selectedOrder.property_type || selectedOrder.industry || 'Not specified'}</p>
-                    </div>
-                    <div>
-                      <span className="text-sm font-medium text-gray-600">Indoor/Outdoor:</span>
-                      <p className="text-gray-900">{selectedOrder.indoor_outdoor || 'Not specified'}</p>
-                    </div>
-                    <div>
-                      <span className="text-sm font-medium text-gray-600">Area Size:</span>
-                      <p className="text-gray-900">{selectedOrder.area_size ? `${selectedOrder.area_size} ${selectedOrder.area_unit || 'sq_ft'}` : selectedOrder.area_sqft ? `${selectedOrder.area_sqft} sq_ft` : 'Not specified'}</p>
-                    </div>
-                    <div>
-                      <span className="text-sm font-medium text-gray-600">Number of Floors:</span>
-                      <p className="text-gray-900">{selectedOrder.num_floors || 'Not specified'}</p>
-                    </div>
-                    <div>
-                      <span className="text-sm font-medium text-gray-600">Rooms/Sections:</span>
-                      <p className="text-gray-900">{selectedOrder.rooms_sections || 'Not specified'}</p>
-                    </div>
-                    <div>
-                      <span className="text-sm font-medium text-gray-600">Duration:</span>
-                      <p className="text-gray-900">{selectedOrder.duration ? `${selectedOrder.duration} hours` : 'Not specified'}</p>
-                    </div>
-                  </div>
-                </div>
-
-                {/* Scheduling Information */}
-                <div className="bg-indigo-50 p-4 rounded-lg">
-                  <h3 className="font-bold text-indigo-800 mb-3 text-lg">📅 Scheduling</h3>
-                  <div className="space-y-3">
-                    <div>
-                      <span className="text-sm font-medium text-gray-600">Preferred Date:</span>
-                      <p className="text-gray-900 font-semibold">{selectedOrder.preferred_date ? new Date(selectedOrder.preferred_date).toLocaleDateString() : 'Not specified'}</p>
-                    </div>
-                    <div>
-                      <span className="text-sm font-medium text-gray-600">Preferred Time:</span>
-                      <p className="text-gray-900">{selectedOrder.preferred_time || 'Not specified'}</p>
-                    </div>
-                    <div>
-                      <span className="text-sm font-medium text-gray-600">Shooting Hours:</span>
-                      <p className="text-gray-900">{selectedOrder.shooting_hours || 'Not specified'}</p>
-                    </div>
-                    <div>
-                      <span className="text-sm font-medium text-gray-600">Area Covered:</span>
-                      <p className="text-gray-900">{selectedOrder.area_covered || 'Not specified'}</p>
-                    </div>
-                  </div>
-                </div>
-
-                {/* Video Specifications */}
-                <div className="bg-red-50 p-4 rounded-lg col-span-3">
-                  <h3 className="font-bold text-red-800 mb-3 text-lg">🎥 Video Specifications</h3>
-                  <div className="grid grid-cols-4 gap-4">
-                    <div>
-                      <span className="text-sm font-medium text-gray-600">FPV Tour Type:</span>
-                      <p className="text-gray-900">{selectedOrder.fpv_tour_type || 'Not specified'}</p>
-                    </div>
-                    <div>
-                      <span className="text-sm font-medium text-gray-600">Video Length:</span>
-                      <p className="text-gray-900">{selectedOrder.video_length ? `${selectedOrder.video_length} minutes` : 'Not specified'}</p>
-                    </div>
-                    <div>
-                      <span className="text-sm font-medium text-gray-600">Resolution:</span>
-                      <p className="text-gray-900">{selectedOrder.resolution || 'Not specified'}</p>
-                    </div>
-                    <div>
-                      <span className="text-sm font-medium text-gray-600">Editing Style:</span>
-                      <p className="text-gray-900">{selectedOrder.editing_style || 'Not specified'}</p>
-                    </div>
-                    <div>
-                      <span className="text-sm font-medium text-gray-600">Background Music/Voiceover:</span>
-                      <p className="text-gray-900">{selectedOrder.background_music_voiceover ? 'Yes' : 'No'}</p>
-                    </div>
-                    <div>
-                      <span className="text-sm font-medium text-gray-600">Editing & Color Grading:</span>
-                      <p className="text-gray-900">{selectedOrder.editing_color_grading ? 'Yes' : 'No'}</p>
-                    </div>
-                    <div>
-                      <span className="text-sm font-medium text-gray-600">Voiceover Script:</span>
-                      <p className="text-gray-900">{selectedOrder.voiceover_script ? 'Yes' : 'No'}</p>
-                    </div>
-                    <div>
-                      <span className="text-sm font-medium text-gray-600">Licensed Background Music:</span>
-                      <p className="text-gray-900">{selectedOrder.background_music_licensed ? 'Yes' : 'No'}</p>
-                    </div>
-                    <div>
-                      <span className="text-sm font-medium text-gray-600">Branding Overlay:</span>
-                      <p className="text-gray-900">{selectedOrder.branding_overlay ? 'Yes' : 'No'}</p>
-                    </div>
-                    <div>
-                      <span className="text-sm font-medium text-gray-600">Multiple Revisions:</span>
-                      <p className="text-gray-900">{selectedOrder.multiple_revisions ? 'Yes' : 'No'}</p>
-                    </div>
-                    <div>
-                      <span className="text-sm font-medium text-gray-600">Drone Licensing Fee:</span>
-                      <p className="text-gray-900">{selectedOrder.drone_licensing_fee ? 'Yes' : 'No'}</p>
-                    </div>
-                    <div>
-                      <span className="text-sm font-medium text-gray-600">Drone Permissions Required:</span>
-                      <p className="text-gray-900">{selectedOrder.drone_permissions_required ? 'Yes' : 'No'}</p>
-                    </div>
-                  </div>
-                </div>
-
-                {/* Financial Details */}
-                <div className="bg-green-50 p-4 rounded-lg col-span-2">
-                  <h3 className="font-bold text-green-800 mb-3 text-lg">💰 Financial Details</h3>
-                  <div className="grid grid-cols-2 gap-4">
-                    <div>
-                      <span className="text-sm font-medium text-gray-600">Base Package Cost:</span>
-                      <p className="text-gray-900 font-semibold">{formatCurrency(selectedOrder.base_package_cost || selectedOrder.base_cost || 0)}</p>
-                    </div>
-                    <div>
-                      <span className="text-sm font-medium text-gray-600">Travel Cost:</span>
-                      <p className="text-gray-900">{formatCurrency(selectedOrder.travel_cost || 0)}</p>
-                    </div>
-                    <div>
-                      <span className="text-sm font-medium text-gray-600">Tax Percentage:</span>
-                      <p className="text-gray-900">{selectedOrder.tax_percentage ? `${selectedOrder.tax_percentage}%` : 'Not specified'}</p>
-                    </div>
-                    <div>
-                      <span className="text-sm font-medium text-gray-600">Discount Code:</span>
-                      <p className="text-gray-900">{selectedOrder.discount_code || 'None'}</p>
-                    </div>
-                    <div>
-                      <span className="text-sm font-medium text-gray-600">Discount Amount:</span>
-                      <p className="text-gray-900">{formatCurrency(selectedOrder.discount_amount || 0)}</p>
-                    </div>
-                    <div>
-                      <span className="text-sm font-medium text-gray-600">Final Cost:</span>
-                      <p className="text-gray-900 font-bold text-lg">{formatCurrency(selectedOrder.total_cost || selectedOrder.final_cost || selectedOrder.total_amount || 0)}</p>
-                    </div>
-                    <div>
-                      <span className="text-sm font-medium text-gray-600">Payment Status:</span>
-                      <span className={`px-2 py-1 text-xs rounded-full ${selectedOrder.payment_status === 'completed' ? 'bg-green-100 text-green-800' : selectedOrder.payment_status === 'pending' ? 'bg-yellow-100 text-yellow-800' : 'bg-red-100 text-red-800'}`}>
-                        {selectedOrder.payment_status || 'Unknown'}
-                      </span>
-                    </div>
-                    <div>
-                      <span className="text-sm font-medium text-gray-600">Payment Amount:</span>
-                      <p className="text-gray-900">{formatCurrency(selectedOrder.payment_amount || 0)}</p>
-                    </div>
-                    <div>
-                      <span className="text-sm font-medium text-gray-600">Payment Date:</span>
-                      <p className="text-gray-900">{selectedOrder.payment_date ? new Date(selectedOrder.payment_date).toLocaleDateString() : 'Not paid'}</p>
-                    </div>
-                    <div>
-                      <span className="text-sm font-medium text-gray-600">Completed Date:</span>
-                      <p className="text-gray-900">{selectedOrder.completed_date ? new Date(selectedOrder.completed_date).toLocaleDateString() : 'Not completed'}</p>
-                    </div>
-                  </div>
-                </div>
-
-                {/* Custom Quote */}
-                <div className="bg-orange-50 p-4 rounded-lg">
-                  <h3 className="font-bold text-orange-800 mb-3 text-lg">📝 Custom Quote</h3>
-                  <div className="space-y-3">
-                    <div>
-                      <span className="text-sm font-medium text-gray-600">Custom Quote:</span>
-                      <p className="text-gray-900">{selectedOrder.custom_quote || 'No custom quote'}</p>
-                    </div>
-                    <div>
-                      <span className="text-sm font-medium text-gray-600">Description:</span>
-                      <p className="text-gray-900">{selectedOrder.description || 'No description'}</p>
-                    </div>
-                  </div>
-                </div>
-
-                {/* Requirements & Notes */}
-                <div className="col-span-3">
-                  <div className="grid grid-cols-2 gap-4">
-                    <div className="bg-gray-50 p-4 rounded-lg">
-                      <h3 className="font-bold text-gray-800 mb-3 text-lg">📋 Requirements</h3>
-                      <div className="space-y-3">
-                        <div>
-                          <span className="text-sm font-medium text-gray-600">General Requirements:</span>
-                          <p className="text-gray-900 text-sm">{selectedOrder.requirements || 'No requirements specified'}</p>
-                        </div>
-                        <div>
-                          <span className="text-sm font-medium text-gray-600">Special Requirements:</span>
-                          <p className="text-gray-900 text-sm">{selectedOrder.special_requirements || 'No special requirements'}</p>
-                        </div>
-                      </div>
-                    </div>
-
-                    <div className="bg-gray-50 p-4 rounded-lg">
-                      <h3 className="font-bold text-gray-800 mb-3 text-lg">💬 Notes & Comments</h3>
-                      <div className="space-y-3">
-                        <div>
-                          <span className="text-sm font-medium text-gray-600">Pilot Notes:</span>
-                          <p className="text-gray-900 text-sm">{selectedOrder.pilot_notes || 'No pilot notes'}</p>
-                        </div>
-                        <div>
-                          <span className="text-sm font-medium text-gray-600">Client Notes:</span>
-                          <p className="text-gray-900 text-sm">{selectedOrder.client_notes || 'No client notes'}</p>
-                        </div>
-                        <div>
-                          <span className="text-sm font-medium text-gray-600">Admin Comments:</span>
-                          <p className="text-gray-900 text-sm">{selectedOrder.admin_comments || 'No admin comments'}</p>
-                        </div>
-                      </div>
-                    </div>
-                  </div>
-                </div>
-
-                {/* Links & Deliverables */}
-                <div className="bg-blue-50 p-4 rounded-lg col-span-3">
-                  <h3 className="font-bold text-blue-800 mb-3 text-lg">🔗 Links & Deliverables</h3>
-                  <div className="grid grid-cols-2 gap-4">
-                    <div>
-                      <span className="text-sm font-medium text-gray-600">Raw Video Drive Link:</span>
-                      {selectedOrder.drive_link ? (
-                        <a href={selectedOrder.drive_link} target="_blank" rel="noopener noreferrer" className="text-blue-600 hover:text-blue-900 underline block">
-                          📁 View Raw Video Files
-                        </a>
-                      ) : (
-                        <p className="text-gray-500">Not uploaded yet</p>
+                      <span className="font-medium">Pilot:</span> {selectedOrder.pilot_name || 'Not assigned'}
+                      {selectedOrder.pilot_email && (
+                        <div className="text-xs text-gray-500">{selectedOrder.pilot_email}</div>
                       )}
                     </div>
                     <div>
-                      <span className="text-sm font-medium text-gray-600">Final Delivery Video:</span>
-                      {selectedOrder.delivery_video_link ? (
-                        <a href={selectedOrder.delivery_video_link} target="_blank" rel="noopener noreferrer" className="text-blue-600 hover:text-blue-900 underline block">
-                          🎬 View Final Video
-                        </a>
-                      ) : (
-                        <p className="text-gray-500">Not delivered yet</p>
+                      <span className="font-medium">Editor:</span> {selectedOrder.editor_name || 'Not assigned'}
+                      {selectedOrder.editor_email && (
+                        <div className="text-xs text-gray-500">{selectedOrder.editor_email}</div>
+                      )}
+                    </div>
+                    <div>
+                      <span className="font-medium">Referral:</span> {selectedOrder.referral_name || 'Direct booking'}
+                      {selectedOrder.referral_email && (
+                        <div className="text-xs text-gray-500">{selectedOrder.referral_email}</div>
                       )}
                     </div>
                   </div>
                 </div>
-
               </div>
             </div>
-          </div>
-        </div>
-      )}
 
-      {/* Assignment Modal */}
-      {showAssignModal && selectedOrder && (
-        <div className="fixed inset-0 bg-black bg-opacity-50 flex items-center justify-center z-50">
-          <div className="bg-white rounded-lg shadow-xl max-w-md w-full mx-4">
-            <div className="flex justify-between items-center p-6 border-b">
-              <h2 className="text-xl font-semibold">Manage Assignments</h2>
+            <div className="mt-6 flex justify-end space-x-3">
               <button
-                onClick={() => setShowAssignModal(false)}
-                className="text-gray-400 hover:text-gray-600"
+                onClick={() => setShowDetailsModal(false)}
+                className="px-4 py-2 bg-gray-300 text-gray-700 rounded-md hover:bg-gray-400"
               >
-                <X size={24} />
+                Close
               </button>
-            </div>
-            <div className="p-6">
-              <div className="space-y-4">
-                <div>
-                  <label className="block text-sm font-medium text-gray-700 mb-2">
-                    Assign Pilot
-                  </label>
-                  <select
-                    value={selectedOrder.pilot_id || ''}
-                    onChange={(e) => {
-                      const pilotId = e.target.value ? parseInt(e.target.value) : null;
-                      handleUpdateOrder(selectedOrder.id, { pilot_id: pilotId, status: 'assigned' });
-                    }}
-                    className="w-full px-3 py-2 border border-gray-300 rounded-md focus:outline-none focus:ring-2 focus:ring-primary-500"
-                  >
-                    <option value="">Select Pilot</option>
-                    {pilots.map((pilot) => (
-                      <option key={pilot.id} value={pilot.id}>
-                        {pilot.name} - {pilot.email}
-                      </option>
-                    ))}
-                  </select>
-                </div>
-
-                <div>
-                  <label className="block text-sm font-medium text-gray-700 mb-2">
-                    Assign Editor
-                  </label>
-                  <select
-                    value={selectedOrder.editor_id || ''}
-                    onChange={(e) => {
-                      const editorId = e.target.value ? parseInt(e.target.value) : null;
-                      handleUpdateOrder(selectedOrder.id, { editor_id: editorId, status: 'assigned' });
-                    }}
-                    className="w-full px-3 py-2 border border-gray-300 rounded-md focus:outline-none focus:ring-2 focus:ring-primary-500"
-                  >
-                    <option value="">Select Editor</option>
-                    {editors.map((editor) => (
-                      <option key={editor.id} value={editor.id}>
-                        {editor.name} - {editor.email}
-                      </option>
-                    ))}
-                  </select>
-                </div>
-
-                <div className="flex justify-end space-x-3 pt-4">
-                  <button
-                    onClick={() => setShowAssignModal(false)}
-                    className="px-4 py-2 text-gray-700 bg-gray-200 rounded-md hover:bg-gray-300"
-                  >
-                    Cancel
-                  </button>
-                </div>
-              </div>
-            </div>
-          </div>
-        </div>
-      )}
-
-      {/* Reject Modal */}
-      {showRejectModal && selectedOrder && (
-        <div className="fixed inset-0 bg-black bg-opacity-50 flex items-center justify-center z-50">
-          <div className="bg-white rounded-lg shadow-xl max-w-md w-full mx-4">
-            <div className="flex justify-between items-center p-6 border-b">
-              <h2 className="text-xl font-semibold">Reject Order</h2>
-              <button
-                onClick={() => setShowRejectModal(false)}
-                className="text-gray-400 hover:text-gray-600"
-              >
-                <X size={24} />
-              </button>
-            </div>
-            <div className="p-6">
-              <div className="space-y-4">
-                <div>
-                  <label className="block text-sm font-medium text-gray-700 mb-2">
-                    Reason for Rejection
-                  </label>
-                  <textarea
-                    value={rejectReason}
-                    onChange={(e) => setRejectReason(e.target.value)}
-                    placeholder="Please provide a reason for rejecting this order..."
-                    className="w-full px-3 py-2 border border-gray-300 rounded-md focus:outline-none focus:ring-2 focus:ring-primary-500"
-                    rows={4}
-                  />
-                </div>
-
-                <div className="flex justify-end space-x-3 pt-4">
-                  <button
-                    onClick={() => setShowRejectModal(false)}
-                    className="px-4 py-2 text-gray-700 bg-gray-200 rounded-md hover:bg-gray-300"
-                  >
-                    Cancel
-                  </button>
-                  <button
-                    onClick={() => handleRejectOrder(selectedOrder.id)}
-                    disabled={!rejectReason.trim()}
-                    className="px-4 py-2 bg-red-600 text-white rounded-md hover:bg-red-700 disabled:opacity-50 disabled:cursor-not-allowed"
-                  >
-                    Reject Order
-                  </button>
-                </div>
-              </div>
             </div>
           </div>
         </div>
@@ -1304,10 +580,39 @@ const Orders: React.FC = () => {
       <CreateOrderModal
         isOpen={showCreateModal}
         onClose={() => setShowCreateModal(false)}
-        onOrderCreated={handleOrderCreated}
+        onOrderCreated={() => {
+          setShowCreateModal(false);
+          fetchOrders();
+        }}
       />
     </div>
   );
 };
 
-export default Orders;
+const NewBookingContent: React.FC<{ onBookingCreated: () => void }> = ({ onBookingCreated }) => {
+  // Implementation moved to main component above
+  return <div>New Booking Content</div>;
+};
+
+const PaymentsContent: React.FC = () => (
+  <div className="bg-white rounded-lg shadow p-6">
+    <h2 className="text-lg font-semibold text-gray-900 mb-4">Payment History</h2>
+    <div className="text-center text-gray-500 py-8">No payments to display</div>
+  </div>
+);
+
+const MessagesContent: React.FC = () => (
+  <div className="bg-white rounded-lg shadow p-6">
+    <h2 className="text-lg font-semibold text-gray-900 mb-4">Messages</h2>
+    <div className="text-center text-gray-500 py-8">No messages to display</div>
+  </div>
+);
+
+const SettingsContent: React.FC = () => (
+  <div className="bg-white rounded-lg shadow p-6">
+    <h2 className="text-lg font-semibold text-gray-900 mb-4">Account Settings</h2>
+    <div className="text-center text-gray-500 py-8">Settings panel coming soon</div>
+  </div>
+);
+
+export default ClientDashboard;
